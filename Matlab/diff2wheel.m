@@ -28,7 +28,7 @@ for i=1:150
 %     drawnow;
     %Vec2D(pose(1),pose(2),pose(3),abs(v));
     
-    alpha = -(state.current(3) - state.past(3))/dt + ;
+    %alpha = -(state.current(3) - state.past(3))/dt + ;
     beta = sqrt((goal(1) - state.current(1))^2 + (goal(2) - state.current(2))^2);
     [v, w] = DifferentialDriveControl(alpha, beta);
     [vr, vl] = DifferentialWheelControl(v, w, r, L);
