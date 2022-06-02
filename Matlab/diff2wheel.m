@@ -3,6 +3,7 @@ clc; close all; clear all;
 c=0; l=0.05; L=0.05; 
 r=0.02; vx=0.15;
 k=0.1; beta=2*l*(1-sign(vx)); ki=0.25;
+L1= 500; L2=-5*10^4*sign(vx);
 %%
 % initialize variables
 start = [0 0 0]; goal = [0 0.5 0];

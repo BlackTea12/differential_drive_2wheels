@@ -5,7 +5,7 @@ tr_W = 0.57;    % width
 tr_H = 0.155;   % height
 tr_m = 30;  % mass
 tr_whD = 0.275; % wheel distance
-tr_whr = 0.0255;  % wheel radius
+tr_whr = 0.0255;  % wheel radius 
 
 % robot mathematical initial state
 robot.state = [0;1;pi/4];  % xr, yr, yawr
@@ -47,6 +47,7 @@ Cd = eye(3);
 % mpc model
 Nc = 3;  % control horizon, should be equal or smaller than prediction horizon
 Np = 3;  % prediction horizon
+N = 3;
 % h = Ce;    % initialize
 % F = Ce * Ae;   % initialize
 
@@ -103,22 +104,22 @@ yr = [0:vr*sin(slope)*dT:vr*sin(slope)*dT*N_sim];   % length 101
 yawr = zeros(1,N_sim);  % length 100
 vr = zeros(1,N_sim);
 wr = zeros(1,N_sim);
-for i=1:N_sim
-   dxr = (xr(i+1) - xr(i))/dT;
-   dyr = (yr(i+1) - yr(i))/dT;
-   
-   if i == 1
-    ddxr = ((xr(i+1) - xr(i))/dT - xr(i)/dT) / dT;
-    ddyr = ((yr(i+1) - yr(i))/dT - yr(i)/dT) / dT;
-   else
-    ddxr = ((xr(i+1) - xr(i))/dT - (xr(i) - xr(i-1))/dT) / dT;
-    ddyr = ((yr(i+1) - yr(i))/dT - (yr(i) -yr(i-1))/dT) / dT;
-   end
-   
-   vr(i) = sqrt(dxr^2 + dyr^2);
-   yawr(i) = atan2(dyr, dxr);
-   wr(i) = (dxr * ddyr - dyr*ddxr)/ vr(i);
-end
+% for i=1:N_sim
+%    dxr = (xr(i+1) - xr(i))/dT;
+%    dyr = (yr(i+1) - yr(i))/dT;
+%    
+%    if i == 1
+%     ddxr = ((xr(i+1) - xr(i))/dT - xr(i)/dT) / dT;
+%     ddyr = ((yr(i+1) - yr(i))/dT - yr(i)/dT) / dT;
+%    else
+%     ddxr = ((xr(i+1) - xr(i))/dT - (xr(i) - xr(i-1))/dT) / dT;
+%     ddyr = ((yr(i+1) - yr(i))/dT - (yr(i) -yr(i-1))/dT) / dT;
+%    end
+%    
+%    vr(i) = sqrt(dxr^2 + dyr^2);
+%    yawr(i) = atan2(dyr, dxr);
+%    wr(i) = (dxr * ddyr - dyr*ddxr)/ vr(i);
+% end
 
 
 % reference 3
@@ -134,33 +135,33 @@ result_states = zeros(m3, N_sim);
 % initialize input robot reference
 robot.ref = zeros(Np*m3,1); % [x1;y1;yaw1;x2;y2;yaw2;...]
 
-figure();
-plot(0,0,'.b'); hold on; grid on;
-xlim([-2 8]); ylim([-1 15]);
-xlabel('X[m]'); ylabel('Y[m]');
+% figure();
+% plot(0,0,'.b'); hold on; grid on;
+% xlim([-2 8]); ylim([-1 15]);
+% xlabel('X[m]'); ylabel('Y[m]');
 
-% simulation loop
-for t = 1: N_sim-Np
-    for k = 1:Np
-        robot.ref((k-1)*m3+1:k*m3) = robot_ref(:,t+k);
-    end
-    robot.ctr_ref = [vr(t); wr(t)];
-    
-    [du, y] = mpc_diff(robot, dT, Nc, Np, Q, R, m1, n1, m2, n2, m3, n3);
-    
-    % save data
-    result_u(:,t) = robot.ctr + du; 
-    result_states(:,t) = y;
-    
-    % data update
-    robot.ctr = result_u(:,t);
-    robot.state = result_states(:,t);
-    
-    plot(robot.state(1),robot.state(2),'r.');
-    plot(robot_ref(1,t+1),robot_ref(2,t+1),'bx');
-    drawnow;
-end
-hold off;
+% test 1: simulation loop
+% for t = 1: N_sim-Np
+%     for k = 1:Np
+%         robot.ref((k-1)*m3+1:k*m3) = robot_ref(:,t+k);
+%     end
+%     robot.ctr_ref = [vr(t); wr(t)];
+%     
+%     [du, y] = mpc_diff(robot, dT, Nc, Np, Q, R, m1, n1, m2, n2, m3, n3);
+%     
+%     % save data
+%     result_u(:,t) = robot.ctr + du; 
+%     result_states(:,t) = y;
+%     
+%     % data update
+%     robot.ctr = result_u(:,t);
+%     robot.state = result_states(:,t);
+%     
+%     plot(robot.state(1),robot.state(2),'r.');
+%     plot(robot_ref(1,t+1),robot_ref(2,t+1),'bx');
+%     drawnow;
+% end
+% hold off;
 
 % plot results
 % figure();
@@ -169,31 +170,25 @@ hold off;
 % plot(result_states(1,1:N_sim-Np), result_states(2,1:N_sim-Np));
 % hold off;
 
+% test 2: simulation loop
+for t = 1:N_sim-N
+   [vtilda, wtilda] = mpc_linear(robot, dT, N, 1, 1); 
+   
+   ustar = [vtilda; wtilda] + robot.ctr_ref;
+   robot.ctr = ustar;
+   
+   % ideal wmr model
+   xd = robot.ctr(1) * cos(robot.state(3));
+   yd = robot.ctr(1) * sin(robot.state(3));
+   yawd = robot.ctr(2);
+   
+   % update
+   robot.state = robot.state + [xd; yd; yawd] *dT;
+   
+end
 figure();
 plot([0:dT:dT*(N_sim-Np-1)],result_u(1,1:N_sim-Np),[0:dT:dT*(N_sim-Np-1)],result_u(2,1:N_sim-Np));
 hold off;
-% n = size(Bd,1);
-% xm = robot.state;   % discrete time model state
-% Xf = zeros(n1+n2,1);    % augmented state model
-% N_sim=100;
-% r=10*ones(N_sim,1);
-% u = [0;0];
-% y = [0;0;0];
-
-% for loop calculation
-% for t = 1:N_sim
-%     DeltaU = inv(Phi_Phi + eye(Nc, Nc)) * (Phi_R * r(t)-Phi_F*Xf);
-%     delta_u = DeltaU(1,1); % using the first time t+1 only
-%     u = u + delta_u;
-%     u1(t) = u;
-%     y1(t) = y;
-%     
-%     % update
-%     xm_old = xm;
-%     xm = Ad*xm + Bd*u;
-%     y = Cd * xm;
-%     Xf = [xm-xm_old; y];    % delta x, y
-% end
 
 function [du, y] = mpc_diff(robot, dT, Nc, Np, Q, R, m1, n1, m2, n2, m3, n3)
 % discrete state space model
@@ -254,6 +249,47 @@ Y = Phi*deltaU + F*augStates;
 y = Y(1:m3,1);
 end
 
+function [vtilda, wtilda] = mpc_linear(robot, dT, N, Q, R)
+A = [1 0 -robot.ctr_ref(1)*sin(robot.ref(3))*dT; 0 1 robot.ctr_ref(1)*cos(robot.ref(3))*dT; 0 0 1];
+B = [cos(robot.ref(3))*dT 0; sin(robot.ref(3))*dT 0; 0 dT];
+
+Amn = length(A);
+Abar = zeros(Amn * N, Amn);
+Abar(1:Amn,:) = A;
+for i=2:N
+    Abar ((i-1)*Amn+1:i*Amn,:) = A * Abar((i-2)*Amn+1:(i-1)*Amn,:);
+end
+
+Bm = size(B,1); Bn = size(B,2);
+Bbar = zeros(Amn*N, Amn*N);
+for i=1:N
+   Bbar(Bm*(i-1)+1:Bm*i,Bn*(i-1)+1:Bn*i) = B; 
+end
+for i=1:N-1
+    Bbar(i*Bm+1:end, Bn*(i-1)+1:Bn*i) = Abar(1:end-Amn*i,:)*B;
+end
+
+Qbar = Q*eye(Amn*N);
+Rbar = R*eye(Bm*N);
+
+% quadprog matrixes
+xtilda = robot.state - robot.ref;
+H = 2 * (Bbar' * Qbar * Bbar + Rbar);
+f = 2*Bbar' * Qbar * Abar * xtilda;
+
+% constraints calculation
+IB = lowTriDiag(1, Bn*N);
+IL = IB;
+b = constraintb(robot.ctr, dT, N, Bn);
+constraint = [IB; -IB; IL; IL];
+
+% quadratic solution
+ubar = quadprog(H, f, constraint, b, [],[],[],[],zeros(N*Bn,1), optimoptions('quadprog','Algorithm','active-set'));
+
+% tilda u output
+vtilda = ubar(1,1);
+wtilda = ubar(2,1);
+end
 % function [du, y] = mpc_diff(robot, dT, Nc, Np, Q, R, m1, n1, m2, n2, m3, n3)
 % % discrete state space model
 % vr = 0.8;   % m/s
