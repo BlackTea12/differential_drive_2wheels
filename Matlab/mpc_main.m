@@ -9,7 +9,7 @@ tr_whD = 0.275; % wheel distance
 tr_whr = 0.0255;  % wheel radius 
 
 % robot mathematical initial state
-robot.state = [0;-0.5;0];  % xr, yr, yawr
+robot.state = [0;0.5; pi/4];  % xr, yr, yawr
 robot.ref = [0;0;0];
 robot.ctr = [0;0];  % vr, wr
 robot.ctr_ref = [0;0];
@@ -18,7 +18,7 @@ robot.ctr_ref = [0;0];
 dT = 0.1;
 
 % prediction and control horizon as N
-N = 10;
+N = 5;
 
 % reference 1
 N_sim = 100;
@@ -73,7 +73,7 @@ for t = 1:N_sim
    robot.ctr_ref = [0.3; 0];
    
    % quad prog
-   [vtilda, wtilda] = mpc_linear(robot, dT, N, 0.5, 0.5); 
+   [vtilda, wtilda] = mpc_linear(robot, dT, N, 1.5, 3.5); 
    
    ustar = [vtilda; wtilda] + robot.ctr_ref;
    robot.ctr = ustar + robot.ctr_ref;
@@ -91,22 +91,24 @@ for t = 1:N_sim
 end
 
 figure();
-plot([dT:dT:dT*N_sim],result_u(1,1:N_sim)); hold on;
-plot([dT:dT:dT*N_sim],result_u(2,1:N_sim))
+plot([dT:dT:dT*N_sim],result_u(1,1:N_sim),'LineWidth',2); hold on;
+plot([dT:dT:dT*N_sim],result_u(2,1:N_sim),'-.','LineWidth',2);
+xlabel('time[sec]', 'fontsize',16); ylabel('v:[m/s], w:[rad/s]', 'fontsize',16);
+legend('linear velocity','angular velocity', 'fontsize',15,'location','best'); title('control states', 'fontsize',18,'fontweight','bold');
 grid on; hold off;
 
 figure();
-plot(result_states(1,1:N_sim), result_states(2,1:N_sim)); hold on;
-plot(xr, yr,'--');
-title('trajectory'); xlabel('x[m]'); ylabel('y[m]');
-legend('mpc', 'reference');
+plot(result_states(1,1:N_sim), result_states(2,1:N_sim) ,'LineWidth',2); hold on;
+plot(xr, yr,'--','LineWidth',2);
+title('trajectory', 'fontsize',18,'fontweight','bold', 'fontsize',18); xlabel('x[m]', 'fontsize',16); ylabel('y[m]', 'fontsize',16);
+legend('mpc', 'reference', 'fontsize',15,'location','best');
 grid on; hold off;
 
 figure();
-plot([dT:dT:dT*N_sim], result_states(3,1:N_sim)); hold on;
-plot([dT:dT:dT*N_sim], yawr,'--');
-title('heading angle');
-legend('mpc', 'reference');
+plot([dT:dT:dT*N_sim], result_states(3,1:N_sim),'LineWidth',2); hold on;
+plot([dT:dT:dT*N_sim], yawr,'--','LineWidth',2);
+title('heading angle','fontweight','bold', 'fontsize',18);
+legend('mpc', 'reference', 'fontsize',15,'location','best');
 grid on; hold off;
 
 function [vtilda, wtilda] = mpc_linear(robot, dT, N, Q, R)
