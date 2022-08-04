@@ -21,11 +21,11 @@ close all; clc; clear all;
 global dT; dT = 0.1;  % [s] discrete time 
 model.r = 0.04187;    % radius of wheel [m]
 model.L = 0.18;   % wheel track [m]
-model.state = [0; 0; pi/2];    % x[m], y[m], heading angle[rad]
+model.state = [0; 3.3; 0];    % x[m], y[m], heading angle[rad]
 model.ctr = [0; 0]; % v[m/s], w[rad/s] (present)
 
 % dwa parameters
-dwa.safe_dist = 0.5;   % [m], safety distance tunning variable between obstacles
+dwa.safe_dist = 0.25;   % [m], safety distance tunning variable between obstacles
 dwa.eval_param = [0.1, 0.2, 0.1, 3.0]; % [heading,dist,velocity,predictDT]
 dwa.lin_vel = 1.0;  % [m/s], limit linear velocity
 dwa.rot_vel = deg2rad(90); % [rad/s], limit rotation velocity
@@ -46,21 +46,57 @@ obstacles=[0 2;
           8 8
           8 9
           7 9];
+
       
+obstacles_time_data=[5 2;
+          5 4.6;
+          5.8 3.3]; 
+cnt=1;
+% moving in x directions
+for t = dT:dT:30
+    cnt = cnt+1;
+    for l=1:length(obstacles_time_data(:,1))
+        obstacles_time_data(l,cnt*2-1) = obstacles_time_data(l,(cnt-1)*2-1) - 1.23*dT;    % x
+        obstacles_time_data(l,cnt*2) = obstacles_time_data(l,(cnt-1)*2);    % y
+    end
+end
+
+% novelty
+% % destination
+% destination = [8; 3.3]; %[x(m),y(m)]
+% 
+% % plot
+% area = [-1, 7, 1.8, 5.7]; % [xmin xmax ymin ymax]
+
+% original
 % destination
-destination = [10; 10]; %[x(m),y(m)]
+destination = [-10; -10]; %[x(m),y(m)]
 
 % plot
 area = [-1, 12, -1, 12]; % [xmin xmax ymin ymax]
 
-main(model, dwa, destination, obstacles, area);
+main(model, dwa, destination, obstacles, area); % original
+% main(model, dwa, destination, obstacles_time_data, area); % novelty
 
 function [] = main(model, dwa, destination, obstacles, area)
 result_state = [];
 result_ctr = [];
 tic;    % start timer
-for i=1:5000
+% time = 1; % novelty
+for i=1:500
+   % original
    [u, trajectory_result] = DWA_Local(model, dwa, destination, obstacles);
+   
+   % novelty
+%    [u, trajectory_result] = DWA_Local(model, dwa, destination, obstacles(:,2*time-1:2*time));
+   
+% novelty
+   % update moving obstacle
+%    if time == length(obstacles(1,:))/2
+%        time = length(obstacles(1,:))/2;
+%    else
+%        time = time+1;
+%    end
    
    % update state and ctr
    model.state = F(model.state, u); % pass it through kinematic model
@@ -70,7 +106,7 @@ for i=1:5000
    result_ctr = [result_ctr, u];
    result_state = [result_state, model.state];   % save current state
 
-   if norm(model.state(1:2) - destination) < 0.5
+   if norm(model.state(1:2) - destination) < 0.2
         disp('Arrived at Destination!'); break;
    end
    
@@ -79,8 +115,9 @@ for i=1:5000
     ArrowLength = 0.5;
     quiver(model.state(1),model.state(2),ArrowLength*cos(model.state(3)),ArrowLength*sin(model.state(3)),'ok'); hold on;
     plot(result_state(1,:), result_state(2,:),'-b');hold on;
-    plot(destination(1),destination(2),'*r');hold on;
-    plot(obstacles(:,1),obstacles(:,2),'ok');hold on;
+    plot(destination(1),destination(2),'*g');hold on;
+    plot(obstacles(:,1),obstacles(:,2),'rs');hold on;
+%     plot(obstacles(:,2*time-1),obstacles(:,2*time),'rs');hold on;
     if ~isempty(trajectory_result)
         for k=1:length(trajectory_result(:,1))/3    % trajectory result includes x, y, psi
             ind = 1 + (k-1)*3;
@@ -102,7 +139,9 @@ end
 
 function [u, trajectory_result] = DWA_Local(model, dwa, destination, obstacles)
 Vr = calculateDynamicWindow(model.ctr, dwa);    % getting velocity min and max
-[EVAL, trajectory_result] = SearchSpace(Vr, model, dwa, destination, obstacles);
+disp(Vr);
+[EVAL, trajectory_result] = SearchSpace(Vr, model, dwa, destination, obstacles);   
+
 
 if isempty(EVAL)
     disp("no path");
@@ -146,6 +185,9 @@ for v = Vr(1):dwa.lin_vel_intv:Vr(2)    % linear speed
         distance = calcDistance(state, obstacles, dwa.safe_dist);
         velocity = abs(v);
         
+        % novelty
+%         distance = modifiedCalcDist(v, w, model.state, obstacles, dwa.eval_param(4));
+     
         EVAL = [EVAL; [v w heading distance velocity]];
         TRAJ = [TRAJ; traj];
     end
@@ -162,6 +204,52 @@ traj = model_state; % saving data for the length of predict_dT
 for t = dT:dT:predict_dT
     model_state = F(model_state, ctr);  % get next state of dT
     traj = [traj, model_state];   % save moved point
+end
+end
+
+function distance = modifiedCalcDist(v, w, model_state, obstacles_cur_pos, predict_dT)
+% modified distance calculation by time interval
+% for detail algorithm, obstacle will have its own predict_dT time
+% for ideal simulation, we assume obstacle movement is observed for same
+% predict_dT
+global dT;
+
+ctr = [v; w];   % linear and angular velocity command
+human_vel = 1.23;    %[m/s]
+sensor_range = 3;   %[m]
+dist_container = [];
+for t = dT:dT:predict_dT
+    model_state = F(model_state, ctr);  % get next state of dT
+    
+    for i = 1:length(obstacles_cur_pos(:,1))    % checking for each obstacle current distance
+        predict_obs = [obstacles_cur_pos(i,1)*human_vel*t, obstacles_cur_pos(i,2)];
+        dist = norm(predict_obs - model_state(1:2)');
+        if sensor_range > dist % within sensor detection range
+%             dist = dist*cos(model_state(3)-2*pi);
+%             disp(dist);
+            dist_container = [dist_container, dist-0.25];
+%             if v ~= 0 && 3 <= dist/v % 3 seconds secured
+%                 if t == predict_dT
+%                     dist_container = [dist_container, dist];    % saving time interval distance
+%                     distance = dist_container(end);
+%                     return;
+%                 end
+%             
+%             elseif 3 > dist/v % 3 seconds not secured
+%                 dist_container = [dist_container, dist];    % saving time interval distance
+%                 distance = dist_container(end);
+%                 return;
+%             else
+%                 dist_container = [dist_container, dist];
+%             end
+        end
+    end
+end
+if isempty(dist_container)
+    % not in sensor range
+    distance = 3;
+else
+    distance = max(dist_container);
 end
 end
 
@@ -202,14 +290,16 @@ function distance = calcDistance(state, obstacles, safe_dist)
 % curvature. If no obstacle is on the curvature, this value is set t a
 % large constant.
 
-distance = 1.5;   % considering border line between obstacles 
+distance_contain = [];   % sensor detection range
 for i = 1:length(obstacles(:,1))    % checking for each obstacle distance
-    disttmp = norm(obstacles(i,:) - state(1:2)') - safe_dist;
-    if distance > disttmp
-        distance = disttmp;
+    disttmp = norm(obstacles(i,:) - state(1:2)');
+    if disttmp < 0.4 % within sensor detection range
+       distance_contain(i) = disttmp;
+    else
+        distance_contain(i) = 0.4;
     end
 end
-
+distance = min(distance_contain);
 end
 
 function X = F(model_state, ctr)
